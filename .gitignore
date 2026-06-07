@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+
+# YOLO weights (optional, uncomment if you don't want to push weights to github)
+# *.pt
+# *.onnx
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db

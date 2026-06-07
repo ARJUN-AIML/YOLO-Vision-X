@@ -1,0 +1,21 @@
+# ─── Core API ────────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0          # ASGI server w/ websocket + hot-reload support
+python-multipart==0.0.9            # form/file upload parsing
+
+# ─── Vision ──────────────────────────────────────────────────────────────────
+ultralytics==8.2.18                # YOLOv8 / YOLOv11 unified SDK
+opencv-python-headless==4.9.0.80   # headless CV2 (no GUI deps, server-safe)
+numpy==1.26.4                      # array ops; pinned for YOLO compat
+
+# ─── Streaming ───────────────────────────────────────────────────────────────
+av==12.1.0                         # PyAV – hardware-accelerated frame decode
+Pillow==10.3.0                     # JPEG encode for MJPEG stream
+
+# ─── Config & Utils ──────────────────────────────────────────────────────────
+pydantic-settings==2.2.1           # typed .env config loader
+python-dotenv==1.0.1               # .env file support
+loguru==0.7.2                      # structured logging
+
+# ─── Dev / Perf ──────────────────────────────────────────────────────────────
+httpx==0.27.0                      # async test client for FastAPI TestClient
