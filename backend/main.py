@@ -16,7 +16,7 @@ executor = ThreadPoolExecutor(max_workers=1)
 async def lifespan(app: FastAPI):
     state.camera = CameraStream(settings.CAMERA_INDEX, 640, 640, 60, 8)
     state.camera.start()
-    state.tracker = TrackerEngine(settings.YOLO_MODEL)
+    state.tracker = TrackerEngine([settings.OPENVINO_MODEL_PATH, settings.ONNX_MODEL_PATH, settings.YOLO_MODEL])
     inference_task = asyncio.create_task(inference())
     yield
     if state.camera:
@@ -50,7 +50,10 @@ async def inference():
                     last_time = time.time()
                     
                     state.telemetry = payload
+                    t2 = time.time()
                     _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, getattr(state, "jpeg_quality", 60)])
+                    t3 = time.time()
+                    payload["jpeg_ms"] = (t3 - t2) * 1000
                     state.jpeg = buf.tobytes()
                 except Exception as e:
                     import traceback
@@ -66,7 +69,7 @@ async def health():
         "status": "ok",
         "camera_ready": state.camera is not None and state.camera.is_running(),
         "tracker_ready": state.tracker is not None,
-        "model": os.path.basename(settings.YOLO_MODEL),
+        "model": os.path.basename(state.tracker.active_model_path) if state.tracker and hasattr(state.tracker, 'active_model_path') else os.path.basename(settings.YOLO_MODEL),
         "device": "CPU"
     }
 

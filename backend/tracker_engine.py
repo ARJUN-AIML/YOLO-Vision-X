@@ -26,10 +26,13 @@ class TrackerEngine:
         for path in model_paths:
             if os.path.exists(path):
                 try:
-                    logger.info(f"Trying to load YOLO engine from: {path}")
-                    self._model = YOLO(path, task="segment")
-                    # Warmup predict to ensure engine is actually working
-                    self._model.predict(np.zeros((self.infer_res, self.infer_res, 3), dtype=np.uint8), verbose=False, imgsz=self.infer_res)
+                    if "openvino" in path.lower():
+                        from native_ov_engine import NativeOpenVINOEngine
+                        self._native_engine = NativeOpenVINOEngine(path)
+                        self._model = self._native_engine # dummy assignment
+                    else:
+                        self._model = YOLO(path, task="segment")
+                        self._model.predict(np.zeros((self.infer_res, self.infer_res, 3), dtype=np.uint8), verbose=False, imgsz=self.infer_res)
                     logger.success(f"Successfully loaded YOLO engine: {path}")
                     self.active_model_path = path
                     break
@@ -97,8 +100,15 @@ class TrackerEngine:
 
         import time
         t_infer_start = time.perf_counter()
-        results = self._model.predict(frame, verbose=False, conf=self.conf_thresh, iou=self.iou_thresh, imgsz=self.infer_res)
-        t_infer_end = time.perf_counter()
+        
+        native_boxes, native_scores, native_classes, native_masks, native_timing = [], [], [], [], {}
+        if hasattr(self, '_native_engine') and self._native_engine is not None:
+            native_boxes, native_scores, native_classes, native_masks, native_timing = self._native_engine.process(frame)
+            t_infer_end = time.perf_counter()
+            results = None
+        else:
+            results = self._model.predict(frame, verbose=False, conf=self.conf_thresh, iou=self.iou_thresh, imgsz=self.infer_res)
+            t_infer_end = time.perf_counter()
 
         if not hasattr(self, 'all_snapshots'):
             self.all_snapshots = deque(maxlen=20)
@@ -125,13 +135,24 @@ class TrackerEngine:
         overlay = annotated_frame.copy()
         
         new_tracker = {}
-        if results and results[0].boxes:
-            masks = results[0].masks if hasattr(results[0], 'masks') else None
-            for idx, box in enumerate(results[0].boxes):
-                xyxy = box.xyxy[0].cpu().numpy()
+        
+        num_detections = len(native_boxes) if hasattr(self, '_native_engine') and self._native_engine is not None else (len(results[0].boxes) if results and results[0].boxes else 0)
+        
+        if num_detections > 0:
+            masks = None if hasattr(self, '_native_engine') and self._native_engine is not None else (results[0].masks if hasattr(results[0], 'masks') else None)
+            
+            for idx in range(num_detections):
+                if hasattr(self, '_native_engine') and self._native_engine is not None:
+                    xyxy = native_boxes[idx]
+                    conf = float(native_scores[idx])
+                    cls_id = int(native_classes[idx])
+                else:
+                    box = results[0].boxes[idx]
+                    xyxy = box.xyxy[0].cpu().numpy()
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                
                 cx, cy = int((xyxy[0]+xyxy[2])/2), int((xyxy[1]+xyxy[3])/2)
-                conf = float(box.conf[0])
-                cls_id = int(box.cls[0])
                 cls_name = self.class_names.get(cls_id, f"class{cls_id}")
                 
                 # Match track_id
@@ -209,12 +230,20 @@ class TrackerEngine:
                 
                 # Draw Mask Polygon if available, otherwise fallback to bounding box
                 has_mask = False
-                if masks is not None and masks.xy and len(masks.xy) > idx:
-                    polygon = np.array(masks.xy[idx], dtype=np.int32)
-                    if len(polygon) > 2:
-                        has_mask = True
-                        cv2.fillPoly(overlay, [polygon], color)
-                        cv2.polylines(annotated_frame, [polygon], isClosed=True, color=color, thickness=2)
+                if hasattr(self, '_native_engine') and self._native_engine is not None:
+                    if len(native_masks) > idx:
+                        polygon = np.array(native_masks[idx], dtype=np.int32).reshape(-1, 1, 2)
+                        if len(polygon) > 2:
+                            has_mask = True
+                            cv2.fillPoly(overlay, [polygon], color)
+                            cv2.polylines(annotated_frame, [polygon], isClosed=True, color=color, thickness=2)
+                else:
+                    if masks is not None and masks.xy and len(masks.xy) > idx:
+                        polygon = np.array(masks.xy[idx], dtype=np.int32)
+                        if len(polygon) > 2:
+                            has_mask = True
+                            cv2.fillPoly(overlay, [polygon], color)
+                            cv2.polylines(annotated_frame, [polygon], isClosed=True, color=color, thickness=2)
                 
                 if not has_mask:
                     cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
