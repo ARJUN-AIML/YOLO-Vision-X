@@ -55,18 +55,26 @@ class TrackerEngine:
         
         # Load metadata if it exists
         self.class_names = {}
-        metadata_path = os.path.join(self.active_model_path, "metadata.json") if os.path.isdir(self.active_model_path) else self.active_model_path.replace(".pt", "").replace(".onnx", "") + "_metadata.json"
+        metadata_path_json = os.path.join(self.active_model_path, "metadata.json") if os.path.isdir(self.active_model_path) else self.active_model_path.replace(".pt", "").replace(".onnx", "") + "_metadata.json"
+        metadata_path_yaml = os.path.join(self.active_model_path, "metadata.yaml") if os.path.isdir(self.active_model_path) else self.active_model_path.replace(".pt", "").replace(".onnx", "") + "_metadata.yaml"
         
-        if not os.path.exists(metadata_path) and os.path.isdir(self.active_model_path):
-            pass # ignore
-        elif os.path.exists(metadata_path):
+        if os.path.exists(metadata_path_json):
             try:
-                with open(metadata_path, "r", encoding="utf-8") as f:
+                with open(metadata_path_json, "r", encoding="utf-8") as f:
                     meta = json.load(f)
                     if "names" in meta:
                         self.class_names = {int(k): v for k, v in meta["names"].items()}
             except Exception as e:
-                logger.warning(f"Failed to load metadata: {e}")
+                logger.warning(f"Failed to load metadata.json: {e}")
+        elif os.path.exists(metadata_path_yaml):
+            try:
+                import yaml
+                with open(metadata_path_yaml, "r", encoding="utf-8") as f:
+                    meta = yaml.safe_load(f)
+                    if "names" in meta:
+                        self.class_names = {int(k): v for k, v in meta["names"].items()}
+            except Exception as e:
+                logger.warning(f"Failed to load metadata.yaml: {e}")
         
         if not self.class_names:
             self.class_names = getattr(self._model, 'names', {})
@@ -74,18 +82,7 @@ class TrackerEngine:
         if not self.class_names:
             self.class_names = {0: "person", 67: "cell phone", 74: "clock", 73: "notebook / book", 24: "backpack"}
 
-        # Student-focused aliases
-        aliases = {
-            73: "notebook / book",
-            24: "backpack",
-            39: "water bottle",
-            76: "pen / scissors / stationary",
-            63: "laptop",
-            67: "mobile phone"
-        }
-        for k, v in aliases.items():
-            if k in self.class_names:
-                self.class_names[k] = v
+
 
         logger.success("TrackerEngine ready.")
 
