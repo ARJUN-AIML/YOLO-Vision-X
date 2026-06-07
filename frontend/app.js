@@ -967,6 +967,12 @@ class VisionDashboardApp {
 
         if (data.error != null) {
             this._logger.log(`[WS ERROR] ${data.error}`, 'error');
+            return;
+        }
+
+        if (data.warning != null) {
+            this._logger.log(`${data.warning}`, 'warn');
+            return;
         }
     }
 

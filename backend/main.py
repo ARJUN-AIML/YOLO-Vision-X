@@ -125,9 +125,21 @@ async def ws_control(ws: WebSocket):
                 elif action == "switch_camera":
                     new_idx = int(val)
                     if state.camera and getattr(state.camera, '_index', None) != new_idx:
-                        state.camera.stop()
-                        state.camera = CameraStream(new_idx, settings.FRAME_WIDTH, settings.FRAME_HEIGHT, settings.TARGET_FPS, 8)
-                        state.camera.start()
+                        test_cap = cv2.VideoCapture(new_idx, cv2.CAP_DSHOW if isinstance(new_idx, int) else cv2.CAP_ANY)
+                        if test_cap.isOpened():
+                            ok, frame = test_cap.read()
+                            test_cap.release()
+                            if ok and frame is not None and frame.size > 0:
+                                state.camera.stop()
+                                state.camera = CameraStream(new_idx, settings.FRAME_WIDTH, settings.FRAME_HEIGHT, settings.TARGET_FPS, 8)
+                                state.camera.start()
+                            else:
+                                await ws.send_json({"warning": "Camera index unavailable"})
+                                continue
+                        else:
+                            test_cap.release()
+                            await ws.send_json({"warning": "Camera index unavailable"})
+                            continue
                 await ws.send_json({"ack": action, "value": val})
     except: pass
 
