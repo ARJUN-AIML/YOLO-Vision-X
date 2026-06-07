@@ -248,10 +248,24 @@ INFER_RESOLUTION    = 640
 
 ## Usage
 
-### Start the Backend
+### Quick Start (Windows — recommended)
+
+1. Complete the [Installation](#installation) steps once.
+2. **Double-click `run.bat`** in the project root.
+
+The script will:
+- Automatically locate and activate `backend/.venv` (or `backend/venv`).
+- Verify that dependencies are installed and print a clear error if they are not.
+- Start the FastAPI server using the **virtual-environment Python** — no system-wide Python required on `PATH`.
+- Open `http://127.0.0.1:8000` in your default browser automatically.
+
+Press **Ctrl+C** in the terminal window to stop the server.
+
+### Start the Backend Manually
 
 ```bash
 cd backend
+.venv\Scripts\activate
 python main.py
 ```
 
