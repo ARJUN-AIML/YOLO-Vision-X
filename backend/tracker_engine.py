@@ -12,9 +12,36 @@ from loguru import logger
 from ultralytics import YOLO
 
 class TrackerEngine:
-    def __init__(self, model_path: str) -> None:
-        logger.info(f"Loading model from: {model_path}")
-        self._model = YOLO(model_path, task="segment")
+    def __init__(self, model_paths: str | list) -> None:
+        if isinstance(model_paths, str):
+            model_paths = [model_paths]
+            
+        logger.info(f"Attempting to load models from fallback list: {model_paths}")
+        self._model = None
+        self.active_model_path = ""
+        
+        from config import settings
+        self.infer_res = settings.INFER_RESOLUTION
+        
+        for path in model_paths:
+            if os.path.exists(path):
+                try:
+                    logger.info(f"Trying to load YOLO engine from: {path}")
+                    self._model = YOLO(path, task="segment")
+                    # Warmup predict to ensure engine is actually working
+                    self._model.predict(np.zeros((self.infer_res, self.infer_res, 3), dtype=np.uint8), verbose=False, imgsz=self.infer_res)
+                    logger.success(f"Successfully loaded YOLO engine: {path}")
+                    self.active_model_path = path
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to load {path}: {e}")
+                    
+        if self._model is None:
+            fallback = model_paths[-1]
+            logger.warning(f"All local engines failed. Falling back to basic load: {fallback}")
+            self._model = YOLO(fallback, task="segment")
+            self.active_model_path = fallback
+
         self.conf_thresh = 0.25
         self.iou_thresh = 0.45
         self.digital_boost = 1.0
@@ -25,15 +52,18 @@ class TrackerEngine:
         
         # Load metadata if it exists
         self.class_names = {}
-        metadata_path = os.path.join(model_path, "metadata.json")
-        if os.path.exists(metadata_path):
+        metadata_path = os.path.join(self.active_model_path, "metadata.json") if os.path.isdir(self.active_model_path) else self.active_model_path.replace(".pt", "").replace(".onnx", "") + "_metadata.json"
+        
+        if not os.path.exists(metadata_path) and os.path.isdir(self.active_model_path):
+            pass # ignore
+        elif os.path.exists(metadata_path):
             try:
                 with open(metadata_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
                     if "names" in meta:
                         self.class_names = {int(k): v for k, v in meta["names"].items()}
             except Exception as e:
-                logger.warning(f"Failed to load metadata.json: {e}")
+                logger.warning(f"Failed to load metadata: {e}")
         
         if not self.class_names:
             self.class_names = getattr(self._model, 'names', {})
@@ -65,7 +95,11 @@ class TrackerEngine:
             self._model.predictor.args.conf = self.conf_thresh
             self._model.predictor.args.iou = self.iou_thresh
 
-        results = self._model.predict(frame, verbose=False, conf=self.conf_thresh, iou=self.iou_thresh)
+        import time
+        t_infer_start = time.perf_counter()
+        results = self._model.predict(frame, verbose=False, conf=self.conf_thresh, iou=self.iou_thresh, imgsz=self.infer_res)
+        t_infer_end = time.perf_counter()
+
         if not hasattr(self, 'all_snapshots'):
             self.all_snapshots = deque(maxlen=20)
         if not hasattr(self, '_my_tracker'):
@@ -211,4 +245,11 @@ class TrackerEngine:
             cv2.fillPoly(overlay, [intrusion_poly], (0, 0, 255))
         cv2.addWeighted(overlay, 0.35, annotated_frame, 0.65, 0, annotated_frame)
         
-        return annotated_frame, {"detections": detections, "count": len(detections), "snapshots": list(getattr(self, 'all_snapshots', []))}
+        t_post_end = time.perf_counter()
+        timing_metrics = {
+            "infer_ms": (t_infer_end - t_infer_start) * 1000,
+            "post_ms": (t_post_end - t_infer_end) * 1000,
+            "total_ms": (t_post_end - t_infer_start) * 1000
+        }
+        
+        return annotated_frame, {"detections": detections, "count": len(detections), "snapshots": list(getattr(self, 'all_snapshots', [])), "engine_timing": timing_metrics}

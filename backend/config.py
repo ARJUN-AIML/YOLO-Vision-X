@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     TARGET_FPS: int = 60
     # Upgrade to YOLOv8 Nano Segmentation for fast speed and perfect object contouring
     YOLO_MODEL: str = "yolov8n-seg.pt"
+    OPENVINO_MODEL_PATH: str = "yolov8n-seg_openvino_model"
+    ONNX_MODEL_PATH: str = "yolov8n-seg.onnx"
+    INFER_RESOLUTION: int = 416
     CONFIDENCE_THRESHOLD: float = 0.25
     DEVICE: str = "cpu"
 
