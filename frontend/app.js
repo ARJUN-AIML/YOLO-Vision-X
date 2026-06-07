@@ -250,6 +250,7 @@ class DOMRenderer {
 
         this._smoothedFPS = 30.0;
         this._smoothedLatency = 10.0;
+        this._trackRegistry = new Map();
     }
 
     resolveElements() {
@@ -266,6 +267,7 @@ class DOMRenderer {
             'stream-res', 'stream-status-badge',
             'status-dot', 'status-label',
             'snapshot-gallery', 'snapshot-empty',
+            'reg-total-seen', 'reg-active', 'reg-lost',
         ];
         for (const id of ids) {
             this._els[id] = document.getElementById(id);
@@ -384,46 +386,95 @@ class DOMRenderer {
         if (!tbody) return;
 
         const detections = payload.detections ?? [];
-        const ts         = payload.ts ?? Date.now();
+        const currentTs = payload.ts ?? Date.now();
+        const currentTsStr = new Date().toLocaleTimeString('en-GB', { hour12: false });
 
-        if (detections.length === 0) {
+        for (const [id, track] of this._trackRegistry) {
+            track.status = 'Lost';
+        }
+
+        for (const det of detections) {
+            if (det.tracking_id == null) continue;
+            const tid = det.tracking_id;
+            const label = det.class_label ?? 'unknown';
+
+            if (!this._trackRegistry.has(tid)) {
+                this._trackRegistry.set(tid, {
+                    class_label: label,
+                    status: 'Active',
+                    first_seen: currentTsStr,
+                    last_seen: currentTsStr,
+                    first_seen_ts: currentTs,
+                    last_seen_ts: currentTs
+                });
+            } else {
+                const t = this._trackRegistry.get(tid);
+                t.status = 'Active';
+                t.last_seen = currentTsStr;
+                t.last_seen_ts = currentTs;
+                t.class_label = label;
+            }
+        }
+
+        if (this._trackRegistry.size > 1000) {
+            const sortedEntries = [...this._trackRegistry.entries()].sort((a, b) => a[1].first_seen_ts - b[1].first_seen_ts);
+            const toRemove = sortedEntries.slice(0, this._trackRegistry.size - 1000);
+            for (const [tid, _] of toRemove) {
+                this._trackRegistry.delete(tid);
+            }
+        }
+
+        let activeCount = 0;
+        let lostCount = 0;
+        for (const track of this._trackRegistry.values()) {
+            if (track.status === 'Active') activeCount++;
+            else lostCount++;
+        }
+
+        this._setText('reg-total-seen', this._trackRegistry.size);
+        this._setText('reg-active', activeCount);
+        this._setText('reg-lost', lostCount);
+
+        if (this._trackRegistry.size === 0) {
             tbody.innerHTML = `
                 <div class="grid grid-cols-12 gap-x-2 px-4 py-3 text-[10px] font-mono text-slate-700 italic">
-                    <span class="col-span-12 text-center">no objects in frame</span>
+                    <span class="col-span-12 text-center">no objects detected yet</span>
                 </div>`;
             return;
         }
 
-        const visible = detections.slice(0, REGISTRY_MAX_ROWS);
-        const rows = visible.map(det => {
-            const tid   = det.tracking_id != null ? det.tracking_id : '—';
-            const label  = det.class_label   ?? 'unknown';
-            const conf   = det.confidence    ?? 0;
-            const colour = confColour(conf);
-            const pct    = (conf * 100).toFixed(1);
-            const timeStr = relativeTime(ts);
+        const sortedTracks = [...this._trackRegistry.entries()].sort((a, b) => {
+            if (a[1].status !== b[1].status) {
+                return a[1].status === 'Active' ? -1 : 1;
+            }
+            return b[1].last_seen_ts - a[1].last_seen_ts;
+        });
 
-            const idColours = [
-                'text-cyan-400',   'text-emerald-400', 'text-amber-400',
-                'text-violet-400', 'text-rose-400',    'text-sky-400',
-            ];
-            const idColour = typeof tid === 'number' ? idColours[tid % idColours.length] : 'text-slate-500';
+        const fragment = document.createDocumentFragment();
+        
+        for (const [tid, track] of sortedTracks) {
+            const rowClass = track.status === 'Active' 
+                ? 'track-row grid grid-cols-12 gap-x-2 px-4 py-2 text-[10px] font-mono border-l-2 border-emerald-500/50 bg-emerald-500/5' 
+                : 'track-row grid grid-cols-12 gap-x-2 px-4 py-2 text-[10px] font-mono border-l-2 border-transparent opacity-60';
 
-            const isIntruding = det.intrusion === true;
-            const rowClass = isIntruding 
-                ? 'track-row grid grid-cols-12 gap-x-2 px-4 py-2 text-[10px] font-mono bg-red-500/20 border-l-2 border-red-500 animate-[blink_1s_ease-in-out_infinite]' 
-                : 'track-row grid grid-cols-12 gap-x-2 px-4 py-2 text-[10px] font-mono border-l-2 border-transparent';
+            const idColours = ['text-cyan-400', 'text-emerald-400', 'text-amber-400', 'text-violet-400', 'text-rose-400', 'text-sky-400'];
+            const idColour = idColours[tid % idColours.length];
+            const statusColour = track.status === 'Active' ? 'text-emerald-400' : 'text-slate-500';
+            
+            const div = document.createElement('div');
+            div.className = rowClass;
+            div.innerHTML = `
+                <span class="col-span-1 ${idColour} font-medium tabular-nums">${tid}</span>
+                <span class="col-span-3 text-slate-300 truncate" title="${track.class_label}">${track.class_label}</span>
+                <span class="col-span-2 text-center ${statusColour}">${track.status}</span>
+                <span class="col-span-3 text-right text-slate-500 tabular-nums">${track.first_seen}</span>
+                <span class="col-span-3 text-right text-slate-400 tabular-nums">${track.last_seen}</span>
+            `;
+            fragment.appendChild(div);
+        }
 
-            return `
-                <div class="${rowClass}">
-                    <span class="col-span-2 ${idColour} font-medium tabular-nums">${tid}</span>
-                    <span class="col-span-4 text-slate-300 truncate" title="${label}">${label}</span>
-                    <span class="col-span-3 text-right ${colour} tabular-nums">${pct}%</span>
-                    <span class="col-span-3 text-right text-slate-600 tabular-nums">${timeStr}</span>
-                </div>`;
-        }).join('');
-
-        tbody.innerHTML = rows;
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
     }
 
     _renderVideoOverlays(payload) {
@@ -1072,6 +1123,12 @@ class VisionDashboardApp {
         const btnClearLog = document.getElementById('btn-clear-log');
         if (btnClearLog) {
             btnClearLog.addEventListener('click', () => {
+                if (this._renderer && this._renderer._trackRegistry) {
+                    this._renderer._trackRegistry.clear();
+                    this._renderer._setText('reg-total-seen', 0);
+                    this._renderer._setText('reg-active', 0);
+                    this._renderer._setText('reg-lost', 0);
+                }
                 const tbody = document.getElementById('track-table-body');
                 if (tbody) {
                     tbody.innerHTML = `
@@ -1131,21 +1188,12 @@ class VisionDashboardApp {
     }
 
     _exportRegistryCSV() {
-        const tbody = document.getElementById('track-table-body');
-        if (!tbody) return;
-        const rows = tbody.querySelectorAll('.grid');
-        let csvContent = "data:text/csv;charset=utf-8,ID,CLASS,CONF,TIME\n";
+        if (!this._renderer || !this._renderer._trackRegistry) return;
+        let csvContent = "data:text/csv;charset=utf-8,ID,CLASS,STATUS,FIRST_SEEN,LAST_SEEN\n";
         
-        rows.forEach(row => {
-            const spans = row.querySelectorAll('span');
-            if (spans.length >= 4 && spans[0].textContent.trim() !== 'awaiting detections...') {
-                const id = spans[0].textContent.trim();
-                const cls = spans[1].textContent.trim();
-                const conf = spans[2].textContent.trim();
-                const time = spans[3].textContent.trim();
-                csvContent += `${id},${cls},${conf},${time}\n`;
-            }
-        });
+        for (const [tid, track] of this._renderer._trackRegistry.entries()) {
+            csvContent += `${tid},${track.class_label},${track.status},${track.first_seen},${track.last_seen}\n`;
+        }
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);

@@ -405,7 +405,7 @@
             <span class="badge badge-cy">LIVE</span>
           </div>
 
-          <div id="class-histogram" class="space-y-2.5">
+          <div id="class-histogram" class="space-y-2.5 overflow-y-auto" style="height: 160px; padding-right: 4px;">
             <div class="flex items-center gap-3">
               <span class="text-slate-600 text-[10px] font-mono w-16 text-right">person</span>
               <div class="flex-1 h-2 bg-slate-800/60 rounded-full overflow-hidden">
@@ -425,27 +425,29 @@
               </svg>
               <span class="text-slate-300 text-xs font-mono font-medium tracking-wider">TRACK REGISTRY</span>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-slate-600 text-[10px] font-mono">
-                <span id="registry-count">0</span> active
-              </span>
-              <button id="btn-export-csv" class="text-slate-600 hover:text-cyan-400 text-[10px] font-mono px-2 py-0.5 border border-slate-800 rounded hover:border-slate-700 transition">
+            <div class="flex items-center gap-3 text-[10px] font-mono w-full px-2">
+              <span class="text-slate-500">Total: <span id="reg-total-seen" class="text-cyan-400 font-bold">0</span></span>
+              <span class="text-slate-500">Active: <span id="reg-active" class="text-emerald-400 font-bold">0</span></span>
+              <span class="text-slate-500">Lost: <span id="reg-lost" class="text-slate-400 font-bold">0</span></span>
+              <div class="flex-1"></div>
+              <button id="btn-export-csv" class="text-slate-600 hover:text-cyan-400 px-2 py-0.5 border border-slate-800 rounded hover:border-slate-700 transition">
                 CSV
               </button>
-              <button id="btn-clear-log" class="text-slate-600 hover:text-slate-400 text-[10px] font-mono px-2 py-0.5 border border-slate-800 rounded hover:border-slate-700 transition">
+              <button id="btn-clear-log" class="text-slate-600 hover:text-slate-400 px-2 py-0.5 border border-slate-800 rounded hover:border-slate-700 transition">
                 CLR
               </button>
             </div>
           </div>
 
           <div class="grid grid-cols-12 gap-x-2 px-4 py-2 border-b border-slate-800/40 bg-slate-950/40 text-[9px] font-mono text-slate-600 uppercase tracking-widest">
-            <span class="col-span-2">ID</span>
-            <span class="col-span-4">CLASS</span>
-            <span class="col-span-3 text-right">CONF</span>
-            <span class="col-span-3 text-right">TIME</span>
+            <span class="col-span-1">ID</span>
+            <span class="col-span-3">CLASS</span>
+            <span class="col-span-2 text-center">STATUS</span>
+            <span class="col-span-3 text-right">FIRST SEEN</span>
+            <span class="col-span-3 text-right">LAST SEEN</span>
           </div>
 
-          <div id="track-table-body" class="overflow-y-auto divide-y divide-slate-800/30" style="max-height: 260px;">
+          <div id="track-table-body" class="overflow-y-auto divide-y divide-slate-800/30" style="height: 260px;">
             <div class="grid grid-cols-12 gap-x-2 px-4 py-2.5 text-[10px] font-mono text-slate-700 italic">
               <span class="col-span-12 text-center">awaiting detections...</span>
             </div>
@@ -596,7 +598,7 @@
             </div>
             <button id="btn-clear-events" class="text-slate-700 hover:text-slate-500 text-[10px] font-mono transition">CLR</button>
           </div>
-          <div id="event-log" class="overflow-y-auto font-mono text-[10px] divide-y divide-slate-800/20" style="max-height: 180px;">
+          <div id="event-log" class="overflow-y-auto font-mono text-[10px] divide-y divide-slate-800/20" style="height: 180px;">
             <div class="flex items-start gap-2 px-4 py-2 text-slate-700 italic">
               <span class="text-slate-800 flex-shrink-0">——:——:——</span>
               <span>system initialised</span>
